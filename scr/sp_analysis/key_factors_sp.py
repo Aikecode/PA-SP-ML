@@ -9,7 +9,7 @@ from sklearn.inspection import permutation_importance, PartialDependenceDisplay
 from xgboost import XGBClassifier 
 
 from src.data_processing import load_and_split_data
-from src.models import create_model_with_params # Still useful for PFI model
+from src.models import create_model_with_params 
 
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
