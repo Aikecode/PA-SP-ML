@@ -6,7 +6,7 @@ import os
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 from sklearn.inspection import permutation_importance, PartialDependenceDisplay
-from xgboost import XGBClassifier # Directly import XGBoost as it's heavily used here
+from xgboost import XGBClassifier 
 
 from src.data_processing import load_and_split_data
 from src.models import create_model_with_params # Still useful for PFI model
