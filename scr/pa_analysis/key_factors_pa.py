@@ -2,10 +2,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import seaborn as sns
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
-from sklearn.inspection import permutation_importance, PartialDependenceDisplay
+from sklearn.inspection import permutation_importance, partial_dependence
+from scipy.interpolate import splrep, splev 
 
 from src.data_processing import load_and_split_data
 from src.models import create_model_with_params
@@ -127,6 +129,9 @@ feature_cols_pdp = [
     'Suitability_for_Exercise'
 ]
 
+X_pdp = pdp_data_combined[feature_cols_pdp]
+y_pdp = pdp_data_combined['Physical_activity']
+
 X_train_pdp, X_test_pdp, y_train_pdp, y_test_pdp = train_test_split(
     X_pdp, y_pdp, test_size=0.2, stratify=y_pdp, random_state=42)
 
@@ -136,31 +141,49 @@ rf_model_pdp.fit(X_train_pdp, y_train_pdp)
 
 print("\nDrawing Partial Dependence Plots...")
 
-num_features_pdp = len(feature_cols_pdp)
-n_cols_pdp = 2
-n_rows_pdp = (num_features_pdp + 1) // n_cols_pdp
+num_features = len(feature_cols_pdp) 
+n_cols = 2
+n_rows = (num_features + 1) // n_cols
 
-fig, axes = plt.subplots(n_rows_pdp, n_cols_pdp, figsize=(12, 4 * n_rows_pdp))
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 4 * n_rows))
 axes = axes.flatten()
 
 for idx, feature in enumerate(feature_cols_pdp):
-    PartialDependenceDisplay.from_estimator(
-        estimator=rf_model_pdp,
-        X=X_train_pdp, 
-        features=[feature],
-        feature_names=feature_cols_pdp,
-        kind='average',
-        grid_resolution=20,
-        ax=axes[idx]
-    )
+    pdp = partial_dependence(rf_model_pdp, X_train_pdp, [feature], grid_resolution=20, kind='both')
+    plot_x = pd.Series(pdp['values'][0]).rename('x')     
+    plot_y = pdp['average'][0]                          
+    plot_i = pdp['individual'][0]                       
+
+    plot_df = pd.DataFrame(columns=['x', 'y'])
+    for ice_line in plot_i:
+        ice_series = pd.Series(ice_line).rename('y')
+        df_i = pd.concat([plot_x.to_frame(), ice_series], axis=1)
+        if not df_i.dropna().empty:
+            plot_df = pd.concat([plot_df, df_i], axis=0, ignore_index=True) 
+
+    sns.lineplot(data=plot_df, x="x", y="y", ax=axes[idx],
+                 color=(0.6157, 0.7647, 0.9059), linewidth=1, linestyle='--', alpha=0.5, errorbar=('ci', 95), estimator='mean')
+
+    axes[idx].plot(plot_x, plot_y, color=(0.3725, 0.5922, 0.8235), alpha=0.4, linestyle='--', label='PDP (raw)')
+    
+    try:
+        if len(plot_x) > 3 and len(plot_y) > 3: 
+            tck = splrep(plot_x, plot_y, s=30, k=2)
+            xnew = np.linspace(plot_x.min(), plot_x.max(), 300)
+            ynew = splev(xnew, tck, der=0)
+            axes[idx].plot(xnew, ynew, color=(0.5765, 0.5804, 0.9059), linewidth=2, label='PDP (smoothed)')
+        else:
+            print(f"⚠️ Not enough data points for spline fitting (feature '{feature}'). Skipping smoothing.")
+    except Exception as e:
+        print(f"⚠️ Interpolation fitting failed (feature '{feature}'): {e}")
+
     axes[idx].set_xlabel(feature)
+    axes[idx].set_ylabel("Physical activity") 
     axes[idx].set_title("") 
+    axes[idx].legend(loc='upper left')
 
 for j in range(idx + 1, len(axes)):
     fig.delaxes(axes[j])
-
-for ax in fig.axes:
-    ax.set_ylabel("Physical activity")
 
 plt.tight_layout()
 

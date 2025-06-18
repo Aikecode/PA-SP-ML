@@ -2,14 +2,17 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import seaborn as sns 
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 from sklearn.inspection import permutation_importance, PartialDependenceDisplay
-from xgboost import XGBClassifier 
+from sklearn.inspection import partial_dependence
+from xgboost import XGBClassifier # Directly import XGBoost as it's heavily used here
+from scipy.interpolate import splev, splrep
 
 from src.data_processing import load_and_split_data
-from src.models import create_model_with_params 
+from src.models import create_model_with_params # Still useful for PFI model
 
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
@@ -166,33 +169,48 @@ else:
 
 print("\nDrawing and saving Partial Dependence Plots...")
 
-n_features = len(selected_features_pdp)
+num_features = len(selected_features_pdp) 
 n_cols = 2
-n_rows = int(np.ceil(n_features / n_cols))
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, n_rows * 4))
+n_rows = int(np.ceil(num_features / n_cols))
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 4 * n_rows))
 axes = axes.flatten()
 
-for i, feature in enumerate(selected_features_pdp):
-    PartialDependenceDisplay.from_estimator(
-        estimator=best_model_pdp,
-        X=X_train_pdp,
-        features=[feature],
-        feature_names=selected_features_pdp,
-        kind='average',
-        grid_resolution=20,
-        ax=axes[i]
-    )
-    axes[i].set_xlabel(feature)
-    axes[i].set_title("") 
+for idx, feature in enumerate(selected_features_pdp): 
+    pdp = partial_dependence(best_model_pdp, X_train_pdp, [feature], grid_resolution=20, kind="both") 
+    plot_x = pd.Series(pdp['values'][0]).rename('x')   
+    plot_y = pdp['average'][0]                         
+    plot_i = pdp['individual'][0]                      
 
-for ax in fig.axes:
-    ax.set_ylabel("Sports participation")
+    plot_df = pd.DataFrame(columns=['x', 'y'])
+    for a in plot_i:
+        a2 = pd.Series(a)
+        df_i = pd.concat([plot_x.to_frame(), a2.rename('y')], axis=1) 
+        plot_df = pd.concat([plot_df, df_i], axis=0, ignore_index=True) 
 
-for j in range(i + 1, len(axes)):
+    sns.lineplot(data=plot_df, x="x", y="y", ax=axes[idx],
+                 color=(0.6157, 0.7647, 0.9059), linewidth=1.2, linestyle='-', alpha=0.5, errorbar=('ci', 95)) 
+
+    axes[idx].plot(plot_x, plot_y, color=(0.3725, 0.5922, 0.8235), alpha=0.4, linestyle='--', label='PDP (raw)')
+
+    try:
+        tck = splrep(plot_x, plot_y, s=30, k=2) 
+        xnew = np.linspace(plot_x.min(), plot_x.max(), 300)
+        ynew = splev(xnew, tck, der=0)
+        axes[idx].plot(xnew, ynew, color=(0.5765, 0.5804, 0.9059), linewidth=2, label='Smoothed PDP')
+    except Exception as e:
+        print(f"⚠️ Interpolation fitting failed (feature '{feature}'): {e}")
+
+    axes[idx].set_xlabel(feature)
+    axes[idx].set_ylabel("Sports participation") 
+    axes[idx].set_title("") 
+    axes[idx].legend(loc='upper left')
+
+for j in range(idx + 1, len(axes)):
     fig.delaxes(axes[j])
 
 plt.tight_layout()
 
-plt.show() 
+plt.show()
 
-print("\n--- SP Key Factors Analysis Finished ---")
+print("\n--- SP Key Factors Analysis Finished ---") 
