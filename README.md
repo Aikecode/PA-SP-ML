@@ -1,4 +1,4 @@
-Paper title: Commonalities and Differences in Factors Influencing Physical Activity and Sports Participation Among Chinese Adults: An Interpretable Machine Learning Approach
+Paper title: Multi-Level Determinants of Physical Activity and Sports Participation Among Adults During COVID-19 Pandemic: An Interpretable Machine Learning Approach
 =================
 ## Requirements
   * Python  3.11
